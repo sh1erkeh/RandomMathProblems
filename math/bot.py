@@ -1,14 +1,13 @@
 from generator import generate
 from math import ceil
-from PIL import Image
 
+from PIL import Image
 import telebot
 from telebot import types
 
 TOKEN = "6429508312:AAFDUcFPPbw8pF7uGbRmVNMPZDeGgQGuCjg"
-welcome_text = """"""
-
 bot = telebot.TeleBot(TOKEN)
+
 
 @bot.message_handler(commands=['start'])
 def start_message(message):
@@ -16,6 +15,7 @@ def start_message(message):
     button_task = types.KeyboardButton(text="Задача")
     keyboard.add(button_task)
     bot.send_message(message.chat.id, text='Чтобы получить задачу, нажмите на кнопку "Задача" или введите "задача" в любом регистре.', reply_markup=keyboard)
+
 
 @bot.message_handler(content_types=['text'])
 def send_pic(message):
@@ -35,6 +35,7 @@ def send_pic(message):
             bot.send_photo(message.chat.id, img)
         finally:
             pass
+
 
 if __name__ == "__main__":
     bot.infinity_polling()
