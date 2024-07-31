@@ -1,16 +1,12 @@
-import random, json, re, time
-import requests, fitz
+import random, json, re
+
+import requests, fitz, pymupdf
+from collections.abc import Iterator
 
 reduction_ratio = 1.5
-pattern1 = r"\d+\."
-pattern2 = "Задача"
-
-with open("bank.json", "r", encoding="utf-8") as file:
-    bank = json.load(file)
 
 
 def flags_decomposer(flags: int) -> list:
-    """Make font flags human readable."""
     res_flags = []
     if flags & 2 ** 0:
         res_flags.append("superscript")
@@ -29,54 +25,40 @@ def flags_decomposer(flags: int) -> list:
     return res_flags
 
 
-def find_spans(page: fitz.fitz.Page, pattern: str) -> list:
-    tasks = []
-    blocks = page.get_text("dict", flags=11)["blocks"]
-    for b in blocks:
+def find_spans(page: fitz.Page) -> Iterator[tuple]:
+    for b in page.get_text("dict", flags=11)["blocks"]:
         for l in b["lines"]:
             for s in l["spans"]:
                 res_flags = flags_decomposer(s["flags"])
-                if re.match(pattern, s["text"]):
-                    if pattern == pattern1 and "bold" in res_flags:
-                        tasks.append(s["bbox"])
-                    elif pattern == pattern2:
-                        tasks.append(s["bbox"])
-    return tasks
+                if re.match(r"\d+\.", s["text"]) and "bold" in res_flags:
+                    yield s["bbox"]
+                if re.match("Задача", s["text"]):
+                    yield s["bbox"]
 
 
-def get_picture(url: str) -> list:
-    req = ''
-    while req == '':
-        try:
-            req = requests.get(url)
-            break
-        except:
-            time.sleep(5)
-            continue
+def process_page(page: pymupdf.Page) -> Iterator[pymupdf.Pixmap]:
+    tasks = list(find_spans(page))
+    for i in range(len(tasks) - 1):
+        top_left = fitz.Point(tasks[i][0] / reduction_ratio, tasks[i][1])
+        bottom_right = fitz.Point(page.rect.width - tasks[i][0] / reduction_ratio, tasks[i + 1][1])
+
+        clip = fitz.Rect(top_left, bottom_right)
+        pix = page.get_pixmap(matrix=fitz.Matrix(4.0, 4.0), clip=clip)
+        yield pix
+
+
+def get_pictures(url: str) -> list:
+    req = requests.get(url)
     pdf = fitz.open(stream=req.content, filetype="pdf")
 
-    clips = []
-    mat = fitz.Matrix(4.0, 4.0)
-
+    pictures = []
     for page in pdf:
-        rect = page.rect
-        tasks = find_spans(page, pattern1)
-        if len(tasks) == 0:
-            tasks = find_spans(page, pattern2)
-
-        for i in range(len(tasks) - 1):
-            top_left = fitz.Point(tasks[i][0] / reduction_ratio, tasks[i][1])
-            bottom_right = fitz.Point(rect.width - tasks[i][0] / reduction_ratio, tasks[i + 1][1])
-
-            clip = fitz.Rect(top_left, bottom_right)
-            pix = page.get_pixmap(matrix=mat, clip=clip)
-            clips.append(pix)
-    return clips
+        pictures += process_page(page)
+    return pictures
 
 
 def generate() -> None:
-    sheet_index = random.randint(0, len(bank) - 1)
-    clips = get_picture(bank[sheet_index])
-
-    scan_index = random.randint(0, len(clips) - 1)
-    clips[scan_index].save(open(f"task.png", "wb"))
+    with open("bank.json", "r", encoding="utf-8") as file:
+        bank = json.load(file)
+    pictures = get_pictures(random.choice(bank))
+    random.choice(pictures).save(open(f"task.png", "wb"))
