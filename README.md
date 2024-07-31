@@ -1,1 +1,1 @@
-The bot is not functional as of now.
+The bot is currently not functional.
